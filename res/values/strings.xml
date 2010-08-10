@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hello">Hello World, Setup!</string>
+    <string name="app_name">Codethink LDAPSync</string>
+    <string name="ldapaccount">LDAP Account</string>
+    <string name="password">Password</string>
+    <string name="binddn">Bind DN</string>
+    <string name="host">Server</string>
+    <string name="security">Security</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="test">Test</string>
+    <string name="login">Login</string>
+    <string name="delete">Delete</string>
+    <string name="codethinkldapaccount">Codethink LDAP Account</string>
+	<string name="ldapauthenticatorservice">Codethink LDAP Authenticator</string>
+	<string name="noaccountstolist">No LDAP accounts are currently set up.</string>
+	<string name="createaccount">Create Account</string>
+	<string name="deleteaccount">Delete Account</string>
+	<string name="editaccount">Edit Account Settings</string>
+	<string name="reallydeleteaccount">Delete this account now?  All contact data from this account will be deleted.</string>
+	<string name="ohwell">Oh, well</string>
+	<string name="deletingaccount">Deleting account...</string>
+	<string name="deletefailed">Failed to delete account</string>
+	<string name="connectionsecurity">Connection security</string>
+</resources>

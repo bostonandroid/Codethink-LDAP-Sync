@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+	android:layout_width="fill_parent" android:layout_height="fill_parent">
+	<TableLayout android:layout_width="fill_parent"
+		android:layout_height="fill_parent">
+		<TableRow>
+			<TextView android:text="@string/host" />
+			<EditText android:inputType="textNoSuggestions" android:id="@+id/serverinput"
+				android:layout_weight="1" android:scrollHorizontally="true"
+				android:hint="(host or host:port)" android:freezesText="true" />
+		</TableRow>
+		<TableRow>
+			<TextView android:text="@string/security" />
+			<EditText android:inputType="textNoSuggestions" android:id="@+id/secinput"
+				android:layout_weight="1" android:scrollHorizontally="true"
+				android:hint="(security)" />
+		</TableRow>
+		<TableRow>
+			<TextView android:text="@string/binddn" />
+			<EditText android:inputType="textNoSuggestions" android:id="@+id/binddninput"
+				android:layout_weight="1" android:scrollHorizontally="true"
+				android:hint="(bind dn)" android:freezesText="true" />
+		</TableRow>
+		<TableRow>
+			<TextView android:text="@string/password" />
+			<EditText android:inputType="textPassword" android:id="@+id/passwordinput"
+				android:layout_weight="1" android:scrollHorizontally="true"
+				android:hint="(bind password)" android:freezesText="true" />
+		</TableRow>
+		<TableRow>
+			<LinearLayout android:layout_span="2" android:layout_width="fill_parent" android:layout_weight="1">
+				<Button android:text="@string/save"
+					android:gravity="right|fill_vertical" android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:onClick="handleSave" />
+			</LinearLayout>
+		</TableRow>
+	</TableLayout>
+</ScrollView>

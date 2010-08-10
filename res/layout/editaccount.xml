@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+	android:layout_width="fill_parent" android:layout_height="fill_parent">
+	<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+		android:layout_width="fill_parent" android:orientation="vertical"
+		android:layout_height="fill_parent">
+		<TextView android:text="@string/host" android:layout_width="fill_parent"
+			android:layout_height="wrap_content" />
+		<EditText android:inputType="textNoSuggestions" android:id="@+id/serverinput"
+			android:layout_width="fill_parent" android:layout_height="wrap_content"
+			android:scrollHorizontally="true" android:hint="(host or host:port)"
+			android:freezesText="true" />
+		<TextView android:text="@string/security"
+			android:layout_width="fill_parent" android:layout_height="wrap_content" />
+		<Spinner android:id="@+id/securityinput" android:layout_height="wrap_content" android:layout_width="fill_parent"
+			android:prompt="@string/connectionsecurity" android:entries="@array/securitytypes" />
+		<TextView android:text="@string/binddn" android:layout_width="fill_parent"
+			android:layout_height="wrap_content" />
+		<EditText android:inputType="textNoSuggestions" android:id="@+id/binddninput"
+			android:layout_width="fill_parent" android:layout_height="wrap_content"
+			android:scrollHorizontally="true" android:freezesText="true"
+			android:hint="(bind dn)" />
+		<TextView android:text="@string/password"
+			android:layout_width="fill_parent" android:layout_height="wrap_content" />
+		<EditText android:inputType="textPassword" android:id="@+id/passwordinput"
+			android:layout_width="fill_parent" android:layout_height="wrap_content"
+			android:scrollHorizontally="true" android:freezesText="true"
+			android:hint="(password)" />
+		<LinearLayout android:layout_height="wrap_content"
+			android:layout_width="fill_parent" android:gravity="center"
+			android:orientation="horizontal">
+			<Button android:text="@string/test" android:layout_width="wrap_content"
+				android:layout_height="wrap_content" android:onClick="handleTest" />
+			<Button android:text="@string/save" android:layout_width="wrap_content"
+				android:layout_height="wrap_content" android:onClick="handleSave" />
+		</LinearLayout>
+	
+</LinearLayout>
+</ScrollView>

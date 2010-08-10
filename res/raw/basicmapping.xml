@@ -1,0 +1,18 @@
+<ldapsyncmapping>
+	<row type="StructuredName">
+		<field column="FAMILY_NAME" ldapattr="sn"/>
+		<field column="GIVEN_NAME" ldapattr="givenName" />
+		<field column="DISPLAY_NAME" ldapattr="cn" />
+	</row>
+	<row type="Phone">
+		<field column="NUMBER" ldapattr="mobile" />
+		<field column="TYPE" typeattr="TYPE_MOBILE" />
+	</row>
+	<row type="Phone">
+		<field column="NUMBER" ldapattr="homePhone" />
+		<field column="TYPE" typeattr="TYPE_HOME" />
+	</row>
+	<row type="Email">
+		<field column="DATA" ldapattr="mail" />
+	</row>
+</ldapsyncmapping>
