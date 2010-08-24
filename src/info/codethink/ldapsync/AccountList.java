@@ -92,7 +92,7 @@ public class AccountList extends ListActivity {
     	super.onCreateContextMenu(menu, v, menuInfo);
     	getMenuInflater().inflate(R.menu.accountlistcontext, menu);
     }
-       
+    
     @Override
     public boolean onContextItemSelected(MenuItem item)
     {

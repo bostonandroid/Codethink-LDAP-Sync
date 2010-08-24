@@ -1,9 +1,7 @@
 package info.codethink.ldapsync;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.List;
 
 import android.accounts.Account;
 import android.content.AbstractThreadedSyncAdapter;
@@ -20,16 +18,11 @@ import android.provider.ContactsContract.Data;
 import android.provider.ContactsContract.RawContacts;
 import android.util.Log;
 
-import com.unboundid.ldap.sdk.LDAPConnection;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.ResultCode;
-import com.unboundid.ldap.sdk.RootDSE;
-import com.unboundid.ldap.sdk.SearchRequest;
-import com.unboundid.ldap.sdk.SearchResult;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 import com.unboundid.ldap.sdk.SearchResultListener;
 import com.unboundid.ldap.sdk.SearchResultReference;
-import com.unboundid.ldap.sdk.SearchScope;
 
 public class LDAPSyncAdapter extends AbstractThreadedSyncAdapter {
 	private final static String TAG = "LDAPSyncAdapter";
@@ -39,16 +32,18 @@ public class LDAPSyncAdapter extends AbstractThreadedSyncAdapter {
 	private class SyncSearchListener implements SearchResultListener {
 		private static final long serialVersionUID = 1L; // why is SearchResultListener serializable?
 		private final ContentProviderClient mProvider;
-		private final List<LDAPSyncMapping> mMapping;
+		private final LDAPSyncMapping mMapping;
 		private final Account mAccount;
 		private final SyncResult mSyncResult;
+		private final ArrayList<ContentProviderOperation> mBatch;
 
 		private SyncSearchListener(ContentProviderClient provider,
-				List<LDAPSyncMapping> mapping, Account account, SyncResult syncResult) {
+				LDAPSyncMapping mapping, Account account, SyncResult syncResult) {
 			this.mProvider = provider;
 			this.mMapping = mapping;
 			this.mAccount = account;
 			this.mSyncResult = syncResult;
+			this.mBatch = new ArrayList<ContentProviderOperation>();
 		}
 
 		// references unsupported, ignore
@@ -75,38 +70,34 @@ public class LDAPSyncAdapter extends AbstractThreadedSyncAdapter {
 				Log.i(TAG, "query for local contact failed", e);
 				return;
 			}
-			ArrayList<ContentProviderOperation> ops = new ArrayList<ContentProviderOperation>();
 			if (rawContactId == -1) {
 				ContentProviderOperation.Builder builder = ContentProviderOperation.newInsert(Utils.syncURI(RawContacts.CONTENT_URI));
 				builder.withValue(RawContacts.ACCOUNT_NAME, mAccount.name);
 				builder.withValue(RawContacts.ACCOUNT_TYPE, mAccount.type);
 				builder.withValue(RawContacts.SOURCE_ID, dn);
-				ops.add(builder.build());
-				
-				for (LDAPSyncMapping m: mMapping) {
-					m.buildInsert(ops, 0, searchEntry);
-				}
+				mBatch.add(builder.build());
+				mMapping.buildInsertOps(mBatch, mBatch.size()-1, searchEntry);
 				mSyncResult.stats.numInserts++;
 			} else {
 				// drop all data from existing row and replace
 				ContentProviderOperation.Builder builder = ContentProviderOperation.newDelete(Utils.syncURI(Data.CONTENT_URI));
 				builder.withSelection(Data.RAW_CONTACT_ID + " = ?", new String[]{""+rawContactId});
-				ops.add(builder.build());
-
-				for (LDAPSyncMapping m: mMapping) {
-					m.buildReplace(ops, rawContactId, searchEntry);
-				}
+				mBatch.add(builder.build());
+				mMapping.buildReplaceOps(mBatch, rawContactId, searchEntry);
 				mSyncResult.stats.numUpdates++;
 			}
+		}
+
+		public void applyChanges() {
 			try {
-				mProvider.applyBatch(ops);
+				mProvider.applyBatch(mBatch);
+				mBatch.clear();
 			} catch (RemoteException e) {
-				Log.e(TAG, "Could not sync contact", e);
-				mSyncResult.stats.numSkippedEntries++;
+				Log.e(TAG, "Could not sync contacts", e);
+				mSyncResult.databaseError = true;
 			} catch (OperationApplicationException e) {
 				Log.e(TAG, "Could not sync contact", e);
 				mSyncResult.databaseError = true;
-				mSyncResult.stats.numSkippedEntries++;
 			}
 		}
 	}
@@ -121,7 +112,7 @@ public class LDAPSyncAdapter extends AbstractThreadedSyncAdapter {
 	@Override
 	public void onPerformSync(final Account account, Bundle extras, String authority,
 			final ContentProviderClient provider, final SyncResult syncResult) {
-		
+
 		Log.i(TAG, "Syncing account " + account.type + "/" + account.name + " for authority " + authority + "...");
 		
 		if (!LDAPAuthenticator.ACCOUNT_TYPE.equals(account.type))
@@ -129,30 +120,25 @@ public class LDAPSyncAdapter extends AbstractThreadedSyncAdapter {
 		if (!authority.equals("com.android.contacts"))
 			throw new IllegalArgumentException("Can't sync authority " + authority);
 		
-		final List<LDAPSyncMapping> mapping;
+		final LDAPSyncMapping mapping;
 		InputStream mappingXml = null;
 		try {
 			Resources r = mContext.getResources();
 			mappingXml = r.openRawResource(R.raw.basicmapping);
-			mapping = new LDAPSyncMapping.Parser().read(mappingXml);
+			mapping = new LDAPSyncMapping(mappingXml);
 		} catch (Exception ex) {
 			Log.e(TAG, "Could not load mapping config", ex);
 			syncResult.databaseError = true;
+			// TODO: log errors somewhere where the UI can get at them
 			return;
 		} finally {
 			if (mappingXml != null)
-				try { mappingXml.close();
-				} catch (IOException e) {}
-		}
-		if (mapping.size() == 0) {
-			syncResult.databaseError = true;
-			return;
+				try { mappingXml.close(); } catch (Exception e) {}
 		}
 
 		LDAPContactSource src = new LDAPContactSource(mContext, account);
-		LDAPConnection connection = null;
 		try {
-			connection = src.connect();
+			src.connect();
 		} catch (LDAPException e) {
 			Log.e(TAG, "Failed to connect to LDAP server for sync", e);
 			if (e.getResultCode() == ResultCode.INVALID_CREDENTIALS) {
@@ -164,20 +150,16 @@ public class LDAPSyncAdapter extends AbstractThreadedSyncAdapter {
 		}
 		
   		try {
-  			RootDSE root = connection.getRootDSE();
-  			String baseDN = root.getNamingContextDNs()[0]; // TODO: allow user to customize search parameters!
-
-  			SearchResultListener listener = new SyncSearchListener(provider, mapping, account, syncResult);
-			SearchRequest request = new SearchRequest(listener,	baseDN, SearchScope.SUB, "(objectClass=inetOrgPerson)");
-			SearchResult result = connection.search(request);
-			if (result.getResultCode() != ResultCode.SUCCESS) {
-				syncResult.stats.numIoExceptions++;
-				Log.w(TAG, "LDAP search result returned: " + result.getDiagnosticMessage());
-			}
+  			SyncSearchListener listener = new SyncSearchListener(provider, mapping, account, syncResult);
+			src.search(listener);
+			Log.v(TAG, "Search complete, applying changes...");
+			listener.applyChanges();
+			Log.v(TAG, "...sync complete.");
 		} catch (LDAPException e)  {
+			Log.e(TAG, "LDAP search failed", e);
 			syncResult.stats.numIoExceptions++;
 		} finally {
-			connection.close();
+			src.close();
 		}
 	}
 }

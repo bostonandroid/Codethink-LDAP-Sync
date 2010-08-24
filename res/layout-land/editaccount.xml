@@ -11,9 +11,8 @@
 		</TableRow>
 		<TableRow>
 			<TextView android:text="@string/security" />
-			<EditText android:inputType="textNoSuggestions" android:id="@+id/secinput"
-				android:layout_weight="1" android:scrollHorizontally="true"
-				android:hint="(security)" />
+		<Spinner android:id="@+id/securityinput" android:layout_height="wrap_content" android:layout_width="fill_parent"
+			android:prompt="@string/connectionsecurity" android:entries="@array/securitytypes" />
 		</TableRow>
 		<TableRow>
 			<TextView android:text="@string/binddn" />
@@ -28,7 +27,15 @@
 				android:hint="(bind password)" android:freezesText="true" />
 		</TableRow>
 		<TableRow>
+			<TextView android:text="@string/basedn" />
+			<EditText android:inputType="textNoSuggestions" android:id="@+id/basedninput"
+				android:layout_weight="1" android:scrollHorizontally="true"
+				android:hint="(search base dn, optional)" android:freezesText="true" />
+		</TableRow>
+		<TableRow>
 			<LinearLayout android:layout_span="2" android:layout_width="fill_parent" android:layout_weight="1">
+				<Button android:text="@string/test" android:layout_width="wrap_content"
+					android:layout_height="wrap_content" android:onClick="handleTest" />
 				<Button android:text="@string/save"
 					android:gravity="right|fill_vertical" android:layout_width="wrap_content"
 					android:layout_height="wrap_content"

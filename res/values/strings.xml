@@ -5,6 +5,7 @@
     <string name="ldapaccount">LDAP Account</string>
     <string name="password">Password</string>
     <string name="binddn">Bind DN</string>
+    <string name="basedn">Base DN</string>
     <string name="host">Server</string>
     <string name="security">Security</string>
     <string name="cancel">Cancel</string>
@@ -12,6 +13,7 @@
     <string name="test">Test</string>
     <string name="login">Login</string>
     <string name="delete">Delete</string>
+    <string name="ok">OK</string>
     <string name="codethinkldapaccount">Codethink LDAP Account</string>
 	<string name="ldapauthenticatorservice">Codethink LDAP Authenticator</string>
 	<string name="noaccountstolist">No LDAP accounts are currently set up.</string>
@@ -23,4 +25,11 @@
 	<string name="deletingaccount">Deleting account...</string>
 	<string name="deletefailed">Failed to delete account</string>
 	<string name="connectionsecurity">Connection security</string>
+	<string name="testingconnection">Testing connection to LDAP server</string>
+	<string name="testpassed">Test connection to LDAP server successful; %d contact entries were found.</string>
+	<string name="testfailed">Test connection to LDAP server failed:\n%s</string>
+	<string name="loadingentries">Loading entries from LDAP server...</string>
+	<string name="usethis">Use this entry</string>
+	<string name="uptoparent">Up to parent</string>
+	<string name="nochildentries">No child entries to list</string>
 </resources>

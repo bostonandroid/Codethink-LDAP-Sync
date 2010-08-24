@@ -1,5 +1,6 @@
 package info.codethink.ldapsync;
 
+import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.net.Uri;
 import android.os.Bundle;
@@ -31,5 +32,25 @@ public class Utils {
 	static Uri syncURI(Uri contentUri)
 	{
 		return contentUri.buildUpon().appendQueryParameter(ContactsContract.CALLER_IS_SYNCADAPTER, "1").build();
+	}
+	public static Bundle getSavedSettngs(AccountManager mgr, Account acct)
+	{
+		String[] allSettings = new String[] { "server", "binddn", "basedn", "security" };
+		Bundle settings = new Bundle();
+		for (String key: allSettings) {
+			settings.putString(key, mgr.getUserData(acct, key));
+		}
+		settings.putString("password", mgr.getPassword(acct));
+		return settings;
+	}
+	public static void saveSettings(AccountManager mgr, Account acct, Bundle settings)
+	{
+		for (String key: settings.keySet()) {
+			if (key.equals("password")) {
+				mgr.setPassword(acct, settings.getString(key));
+			} else {
+				mgr.setUserData(acct, key, settings.getString(key));
+			}
+		}
 	}
 }

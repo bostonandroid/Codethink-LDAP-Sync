@@ -12,7 +12,28 @@
 		<field column="NUMBER" ldapattr="homePhone" />
 		<field column="TYPE" typeattr="TYPE_HOME" />
 	</row>
+	<row type="Phone">
+		<field column="NUMBER" ldapattr="phoneNumber" />
+		<field column="TYPE" typeattr="TYPE_OTHER" />
+	</row>
+	<row type="Phone">
+		<field column="NUMBER" ldapattr="facsimileTelephoneNumber" />
+		<field column="TYPE" typeattr="TYPE_FAX_WORK" />
+	</row>
+	<row type="Photo">
+		<field column="PHOTO" ldapattr="jpegPhoto" blob="1" />
+	</row>
 	<row type="Email">
 		<field column="DATA" ldapattr="mail" />
+	</row>
+	<row type="Note">
+		<field column="NOTE" ldapattr="description" />
+	</row>
+	<row type="StructuredPostal">
+		<field column="TYPE" typeattr="TYPE_HOME" />
+		<field column="STREET" ldapattr="street" />
+		<field column="CITY" ldapattr="l" />
+		<field column="REGION" ldapattr="st" />
+		<field column="POSTCODE" ldapattr="postalCode" />
 	</row>
 </ldapsyncmapping>

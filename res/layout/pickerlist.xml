@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+  xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="fill_parent"
+  android:layout_height="fill_parent"
+  android:orientation="vertical"
+  >
+ 
+    <TextView android:id="@+id/dn"
+   			  android:layout_width="fill_parent"
+   			  android:layout_height="wrap_content"
+   			  android:text="(DN goes here)"
+   			  />
+   
+    <LinearLayout android:orientation="horizontal"
+                  android:layout_width="fill_parent"
+                  android:layout_height="wrap_content"
+                  >
+      <Button android:text="@string/usethis"
+              android:onClick="handleUseThisClick"
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              />
+      <Button android:text="@string/uptoparent"
+              android:onClick="handleParentClick"
+              android:id="@+id/parentbutton"
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              />
+   </LinearLayout>
+
+  <ListView android:id="@id/android:list"
+            android:layout_width="fill_parent"
+  	  		android:layout_height="wrap_content"
+            android:layout_weight="1"
+  			/>
+  			
+   <TextView android:id="@id/android:empty"
+  	  		 android:layout_width="fill_parent"
+  			 android:layout_height="wrap_content"
+  			 android:text="@string/loadingentries"
+  			 android:layout_weight="1"
+  			 />
+
+ </LinearLayout>

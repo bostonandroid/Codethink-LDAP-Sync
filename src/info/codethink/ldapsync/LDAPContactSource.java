@@ -1,12 +1,14 @@
 package info.codethink.ldapsync;
 
 import java.security.GeneralSecurityException;
+import java.util.List;
 
 import javax.net.SocketFactory;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.content.Context;
+import android.os.Bundle;
 import android.util.Log;
 
 import com.unboundid.ldap.sdk.ExtendedResult;
@@ -17,6 +19,8 @@ import com.unboundid.ldap.sdk.ResultCode;
 import com.unboundid.ldap.sdk.RootDSE;
 import com.unboundid.ldap.sdk.SearchResult;
 import com.unboundid.ldap.sdk.SearchResultEntry;
+import com.unboundid.ldap.sdk.SearchResultListener;
+import com.unboundid.ldap.sdk.SearchResultReference;
 import com.unboundid.ldap.sdk.SearchScope;
 import com.unboundid.ldap.sdk.extensions.StartTLSExtendedRequest;
 import com.unboundid.util.ssl.SSLUtil;
@@ -31,8 +35,6 @@ public class LDAPContactSource {
 	private static final String SEC_SSL = "SSL";
 	private static final String SEC_SSL_ANYCERT = "SSL (any certificate)";
 	
-	private AccountManager mMgr;
-
 	private String mBindDN;
 	private String mPassword;
 
@@ -42,18 +44,30 @@ public class LDAPContactSource {
 	private String mHost;
 	private int mPort;
 	
+	private String mSearchBase;
+	
+	private LDAPConnection mConnection;
+	
 	public LDAPContactSource(Context ctx, Account ldapAccount) {
-		if (ctx == null) // this will happen eventually anyway; throw here to simplify debugging
-			throw new NullPointerException("Context cannot be null");
-		if (ldapAccount == null || !ldapAccount.type.equals(LDAPAuthenticator.ACCOUNT_TYPE))
+			if (ldapAccount == null || !ldapAccount.type.equals(LDAPAuthenticator.ACCOUNT_TYPE))
 			throw new IllegalArgumentException("ldapAccount must be non-null and of type " + LDAPAuthenticator.ACCOUNT_TYPE);
 		
-		mMgr = AccountManager.get(ctx);
-		
-		String server = mMgr.getUserData(ldapAccount, "server");
-		mBindDN = mMgr.getUserData(ldapAccount, "binddn");
-		mPassword = mMgr.getPassword(ldapAccount);
-		String security = mMgr.getUserData(ldapAccount, "security");
+		AccountManager mgr = AccountManager.get(ctx);
+		Bundle settings = Utils.getSavedSettngs(mgr, ldapAccount);
+		initFromSettings(settings);
+	}
+
+	public LDAPContactSource(Bundle accountSettings)
+	{
+		initFromSettings(accountSettings);
+	}
+
+	private void initFromSettings(Bundle settings) {
+		String server = settings.getString("server");
+		mBindDN = settings.getString("binddn");
+		mPassword = settings.getString("password");
+		String security = settings.getString("security");
+		mSearchBase = settings.getString("basedn");
 		
 		mUseTLS = security.equals(SEC_TLS) || security.equals(SEC_TLS_ANYCERT);
 		mUseSSL = security.equals(SEC_SSL) || security.equals(SEC_SSL_ANYCERT);
@@ -69,7 +83,7 @@ public class LDAPContactSource {
 		}
 	}
 
-	public LDAPConnection connect() throws LDAPException {
+	public void connect() throws LDAPException {
 		LDAPConnectionOptions options = new LDAPConnectionOptions();
 		options.setAutoReconnect(true);
 		
@@ -121,32 +135,56 @@ public class LDAPContactSource {
 			}
 		}
 		
-		return connection;
+		mConnection = connection;
 	}
 	
-	public void validate() throws LDAPException
+	public void browse(String dn, List<String> outChildren) throws LDAPException
 	{
-		LDAPConnection connection = connect();
-		connection.close();
-	}
-	
-	public void test() throws LDAPException
-	{
-		LDAPConnection connection = connect();
-		RootDSE root = connection.getRootDSE();
-		
-		String[] baseDNs = root.getNamingContextDNs();
-		for (String baseDN: baseDNs) {
-			SearchResult sr = connection.search(baseDN, SearchScope.SUB, "(objectClass=inetOrgPerson)", "dn");
-			if (sr.getResultCode() != ResultCode.SUCCESS) {
-				Log.e(TAG, "Search failed:" + sr.getDiagnosticMessage());
-				continue;
-			}
-			for (SearchResultEntry entry: sr.getSearchEntries()) {
-				Log.i(TAG, "Found " + entry.getDN());
-			}
+		SearchResult sr = mConnection.search(dn, SearchScope.ONE, "(objectClass=*)");
+		for (SearchResultEntry entry: sr.getSearchEntries()) {
+			outChildren.add(entry.getDN());
 		}
 	}
 	
+	public void search(SearchResultListener listener) throws LDAPException
+	{
+		String baseDN = mSearchBase;
+		if (baseDN == null) {
+			baseDN = getRootDN();
+		}
+		SearchResult sr = mConnection.search(listener, baseDN, SearchScope.SUB, "(objectClass=inetOrgPerson)");
+		if (sr.getResultCode() != ResultCode.SUCCESS) {
+			throw new LDAPException(sr);
+		}
+	}
+
+	public String getRootDN() throws LDAPException {
+		RootDSE root = mConnection.getRootDSE();
+		return root.getNamingContextDNs()[0];
+	}
 	
+	public int test() throws LDAPException
+	{
+		final int[] resultCount = new int[]{0}; // wrap in array so inner SearchResultListener can update
+		connect();
+		try {
+			search(new SearchResultListener() {
+				private static final long serialVersionUID = 1L;
+				public void searchReferenceReturned(SearchResultReference ref) {
+					Log.i(TAG, "Found reference " + ref.getReferralURLs());
+				}
+				public void searchEntryReturned(SearchResultEntry entry) {
+					Log.i(TAG, "Found " + entry.getDN());
+					resultCount[0]++;
+				}
+			});
+		} finally {
+			close();
+		}
+		return resultCount[0];
+	}
+	
+	public void close() {
+		if (mConnection != null) mConnection.close();
+	}	
 }

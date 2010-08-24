@@ -26,6 +26,17 @@
 			android:layout_width="fill_parent" android:layout_height="wrap_content"
 			android:scrollHorizontally="true" android:freezesText="true"
 			android:hint="(password)" />
+	    <TextView android:text="@string/basedn" android:layout_width="fill_parent"
+			android:layout_height="wrap_content"/>
+		<LinearLayout android:layout_height="wrap_content" android:layout_width="fill_parent">
+		  <EditText android:inputType="textNoSuggestions" android:id="@+id/basedninput"
+			  android:layout_width="wrap_content" android:layout_height="wrap_content"
+			  android:scrollHorizontally="true" android:freezesText="true"
+			  android:hint="(search base dn, optional)"
+			  android:layout_weight="1"/>
+		  <Button android:text="..." android:onClick="handlePickBase"
+		      android:layout_height="wrap_content" android:layout_width="wrap_content" />
+		</LinearLayout>
 		<LinearLayout android:layout_height="wrap_content"
 			android:layout_width="fill_parent" android:gravity="center"
 			android:orientation="horizontal">
