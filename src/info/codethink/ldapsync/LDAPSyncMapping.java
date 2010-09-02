@@ -1,10 +1,14 @@
 package info.codethink.ldapsync;
 
+import info.codethink.ldapsync.LDAPSyncAdapter.BuilderBuilder;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.xml.sax.Attributes;
@@ -17,6 +21,8 @@ import com.unboundid.ldap.sdk.SearchResultEntry;
 import android.content.ContentProviderClient;
 import android.content.ContentProviderOperation;
 import android.content.ContentProviderOperation.Builder;
+import android.database.Cursor;
+import android.os.RemoteException;
 import android.provider.ContactsContract.CommonDataKinds;
 import android.provider.ContactsContract.Data;
 import android.sax.Element;
@@ -26,11 +32,12 @@ import android.util.Log;
 import android.util.Xml;
 import android.util.Xml.Encoding;
 
+// TODO: write tests that mappings preserve all ldap attribs
 
 class LDAPSyncMapping {
 	static final String TAG = "LDAPSyncMapping";
 	
-	private static final Object MIME_LDAP_ATTRIBUTE = "vnd.android.cursor.item/vnd.info.codethink.ldap.contactldifentry";
+	private static final String MIME_LDAP_ATTRIBUTE = "vnd.android.cursor.item/vnd.info.codethink.ldap.contactldifentry";
 	private static final String COLUMN_ATTRIB_NAME = Data.DATA1;
 	private static final String COLUMN_ATTRIB_INDEX = Data.DATA2;
 	private static final String COLUMN_ATTRIB_DATA = Data.DATA15;
@@ -80,26 +87,10 @@ class LDAPSyncMapping {
 			mValues.add(new Value(column, true, value, false));
 		}
 
-		public void buildInsert(ArrayList<ContentProviderOperation> ops, int rawIdReference, SearchResultEntry data, Set<String> mappedAttribs) {
-			List<Builder> rows = buildRows(data, mappedAttribs);
-			for (Builder builder: rows) {
-				builder.withValueBackReference(Data.RAW_CONTACT_ID, rawIdReference);
-				ops.add(builder.build());
-			}
-		}
-
-		public void buildReplace(ArrayList<ContentProviderOperation> ops, long rawContactId, SearchResultEntry data, Set<String> mappedAttribs) {
-			List<Builder> rows = buildRows(data, mappedAttribs);
-			for (Builder builder: rows) {
-				builder.withValue(Data.RAW_CONTACT_ID, rawContactId);
-				ops.add(builder.build());
-			}
-		}
-
-		private List<ContentProviderOperation.Builder> buildRows(SearchResultEntry data, Set<String> mappedAttribs) {
+		public void buildInsert(ArrayList<ContentProviderOperation> ops, SearchResultEntry data, Set<String> mappedAttribs, BuilderBuilder bb) {
 			int numDynamicAttribs = 0; // TODO: make this a member boolean
 
-			ArrayList<Builder> builders = new ArrayList<Builder>(5);
+			ArrayList<Builder> builders = new ArrayList<Builder>();
 			StringBuilder msg = new StringBuilder("Adding " + mMimeType + " records with ");
 			for (LDAPSyncMapping.Value val: mValues) {
 				if (val.isLiteral) continue;
@@ -109,14 +100,14 @@ class LDAPSyncMapping {
 				mappedAttribs.add(val.value);
 				if (val.isBlob) {
 					byte[][] values = data.getAttributeValueByteArrays(val.value);
-					addBuilders(builders, values.length);
+					addBuilders(builders, values.length, bb);
 					for (int i = 0; i < values.length; i++) {
 						builders.get(i).withValue(val.columnName, values[i]);
 						msg.append(val.columnName + "[" + i + "] = <" + values[i].length + " bytes>, ");
 					}
 				} else {
 					String values[] = data.getAttributeValues(val.value);
-					addBuilders(builders, values.length);
+					addBuilders(builders, values.length, bb);
 					for (int i = 0; i < values.length; i++) {
 						builders.get(i).withValue(val.columnName, values[i]);
 						msg.append(val.columnName + "[" + i + "] =" + values[i] + ", ");
@@ -124,33 +115,58 @@ class LDAPSyncMapping {
 				}
 			}
 			
-			if (numDynamicAttribs == 0) addBuilders(builders, 1);
+			if (numDynamicAttribs == 0) addBuilders(builders, 1, bb);
 			
 			if (builders.isEmpty())
-				return builders;
+				return;
 				
 			Log.d(TAG, msg.toString());
 
-			for (Builder builder: builders) { // fill in literal values and MIME type
+			for (Builder builder: builders) {
+				// fill in literal values and MIME type
 				builder.withValue(Data.MIMETYPE, mMimeType);
 				for (Value val: mValues) {
 					if (!val.isLiteral) continue;
 					builder.withValue(val.columnName, val.value);
 				}
+				
+				ops.add(builder.build());
 			}
-			
-			return builders;
 		}
 
-		private void addBuilders(ArrayList<Builder> builders, int length) {
+		private void addBuilders(ArrayList<Builder> builders, int length, BuilderBuilder bb) {
 			while (builders.size() < length)
-				builders.add(ContentProviderOperation.newInsert(Utils.syncURI(Data.CONTENT_URI)));
+				builders.add(bb.newInsert());
 		}
 
 		public void buildLDIFEntry(ContentProviderClient provider,
-				long rawContactId, Entry entry) {
-			// TODO Auto-generated method stub
-			
+				long rawContactId, Entry entry) throws RemoteException {
+			String[] projection = new String[mValues.size()];
+			for (int i = 0; i < mValues.size(); i++)
+				projection[i] = mValues.get(i).columnName;
+			String selection = Data.MIMETYPE + " = ? AND " + Data.RAW_CONTACT_ID + " = ?";
+			String[] selectionArgs = new String[] { mMimeType, ""+rawContactId };
+			Cursor c = provider.query(Utils.syncURI(Data.CONTENT_URI), projection, selection, selectionArgs, null);
+			int rowCount = c.getCount();
+			ArrayList<ArrayList<byte[]>> blobVals = new ArrayList<ArrayList<byte[]>>(rowCount);
+			ArrayList<ArrayList<String>> stringVals = new ArrayList<ArrayList<String>>(rowCount);
+			for (int j = 0; j < blobVals.size(); j++) blobVals.set(j, new ArrayList<byte[]>());
+			for (int j = 0; j < stringVals.size(); j++) stringVals.set(j, new ArrayList<String>());
+			while (c.moveToNext()) {
+				for (int i = 0; i < mValues.size(); i++) {
+					if (c.isNull(i)) continue;
+					
+					Value v = mValues.get(i);
+					if (v.isLiteral) continue; // check if the value is correct?
+					
+					if (v.isBlob) {
+						blobVals.get(i).add(c.getBlob(i));
+					} else {
+						stringVals.get(i).add(c.getString(i));
+					}
+				}
+			}
+			// TODO: build the entry
 		}
 	}
 	
@@ -245,15 +261,21 @@ class LDAPSyncMapping {
 		mRows = new Parser().read(mappingXml);
 	}
 	
-	public void addUnmappedAttributes(
-			ArrayList<ContentProviderOperation> ops,
-			SearchResultEntry data, Set<String> mappedAttribs) {
-		for (Attribute attrib: data.getAttributes()) {
+	public void buildData(ArrayList<ContentProviderOperation> ops, SearchResultEntry entry, LDAPSyncAdapter.BuilderBuilder bb)
+	{
+		HashSet<String> mappedAttribs = new HashSet<String>();
+		for (RowBuilder row: mRows) {
+			row.buildInsert(ops, entry, mappedAttribs, bb);
+		}
+		
+		// add custom data entries for unmapped attributes
+		for (Attribute attrib: entry.getAttributes()) {
 			if (mappedAttribs.contains(attrib.getName()))
 				continue;
+			
 			int i = 0;
 			for (byte[] value: attrib.getValueByteArrays()) {
-				Builder b = ContentProviderOperation.newInsert(Utils.syncURI(Data.CONTENT_URI));
+				Builder b = bb.newInsert();
 				b.withValue(Data.MIMETYPE, MIME_LDAP_ATTRIBUTE);
 				b.withValue(COLUMN_ATTRIB_NAME, attrib.getName());
 				b.withValue(COLUMN_ATTRIB_INDEX, ""+(i++));
@@ -262,33 +284,46 @@ class LDAPSyncMapping {
 			}
 		}
 	}
-	
-	public void buildInsertOps(ArrayList<ContentProviderOperation> ops, int rawIdReference, SearchResultEntry entry)
-	{
-		HashSet<String> mappedAttribs = new HashSet<String>();
-		for (RowBuilder row: mRows) {
-			row.buildInsert(ops, rawIdReference, entry, mappedAttribs);
-		}
-		addUnmappedAttributes(ops, entry, mappedAttribs);
-	}
-	public void buildReplaceOps(ArrayList<ContentProviderOperation> ops, long rawContactId, SearchResultEntry entry)
-	{
-		HashSet<String> mappedAttribs = new HashSet<String>();
-		for (RowBuilder row: mRows) {
-			row.buildReplace(ops, rawContactId, entry, mappedAttribs);
-		}
-		addUnmappedAttributes(ops, entry, mappedAttribs);
-	}
-	
+
 	public Entry buildLDIFEntry(ContentProviderClient provider, long rawContactId)
 	{
-		String dn = ""; // TODO: get DN
-		Entry result = new Entry(dn);
-		for (RowBuilder row: mRows) {
-			row.buildLDIFEntry(provider, rawContactId, result);
+		try {
+			String dn = ""; // TODO: get DN
+			Entry result = new Entry(dn);
+			for (RowBuilder row: mRows) {
+				row.buildLDIFEntry(provider, rawContactId, result);
+			}
+
+			// get unmapped LDAP attributes
+			HashMap<String, ArrayList<byte[]>> unmappedAttribs = new HashMap<String, ArrayList<byte[]>>();
+			Cursor c = provider.query(Utils.syncURI(Data.CONTENT_URI),
+					new String[] { COLUMN_ATTRIB_NAME, COLUMN_ATTRIB_INDEX, COLUMN_ATTRIB_DATA },
+					Data.MIMETYPE + " = ? AND " + Data.RAW_CONTACT_ID + " = ?",
+					new String[] { MIME_LDAP_ATTRIBUTE, ""+rawContactId },
+					null);
+			while (c.moveToNext()) {
+				String attribName = c.getString(0);
+				int attribIndex = c.getInt(1);
+				byte[] data = c.getBlob(2);
+				
+				ArrayList<byte[]> vals = unmappedAttribs.get(attribName);
+				if (vals == null) {
+					vals = new ArrayList<byte[]>();
+					unmappedAttribs.put(attribName, vals);
+				}
+				while (vals.size() <= attribIndex) vals.add(null);
+				vals.set(attribIndex, data);
+			}
+			for (Map.Entry<String, ArrayList<byte[]>> entry: unmappedAttribs.entrySet()) {
+				byte[][] vals = entry.getValue().toArray(new byte[entry.getValue().size()][]);
+				result.addAttribute(entry.getKey(), vals);
+			}
+			
+			return result;
+		} catch (RemoteException e) {
+			// TODO: deal with this, or throw
+			Log.v(TAG, "Couldn't query unmapped attribs on raw contact", e);
 		}
-		// TODO: get unmapped LDAP attribs
-		// even once we have this, we have to delta it against an older buildLDIFEntry result, since some data from LDAP doesn't exist here
-		return result;
+		return null;
 	}
 }

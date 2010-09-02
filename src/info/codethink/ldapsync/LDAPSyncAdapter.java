@@ -7,6 +7,7 @@ import android.accounts.Account;
 import android.content.AbstractThreadedSyncAdapter;
 import android.content.ContentProviderClient;
 import android.content.ContentProviderOperation;
+import android.content.ContentProviderOperation.Builder;
 import android.content.Context;
 import android.content.OperationApplicationException;
 import android.content.SyncResult;
@@ -28,6 +29,10 @@ public class LDAPSyncAdapter extends AbstractThreadedSyncAdapter {
 	private final static String TAG = "LDAPSyncAdapter";
 	
 	private final Context mContext;
+	
+	public interface BuilderBuilder {
+		ContentProviderOperation.Builder newInsert();
+	}
 	
 	private class SyncSearchListener implements SearchResultListener {
 		private static final long serialVersionUID = 1L; // why is SearchResultListener serializable?
@@ -54,13 +59,15 @@ public class LDAPSyncAdapter extends AbstractThreadedSyncAdapter {
 			String[] columns = new String[] { RawContacts._ID };
 			String conditions = RawContacts.ACCOUNT_TYPE + " = '" + LDAPAuthenticator.ACCOUNT_TYPE + "' AND " +
 				RawContacts.SOURCE_ID + " = ?";
-			long rawContactId = -1;
+			final long rawContactId;
 			Log.v(TAG, "Syncing contact with DN " + dn);
 			try {
 				Cursor result = mProvider.query(RawContacts.CONTENT_URI, columns, conditions, new String[]{dn}, null);
 				try {
 					if (result.moveToFirst())
 						rawContactId = result.getLong(0);
+					else
+						rawContactId = -1;
 				} finally {
 					result.close();
 				}
@@ -76,20 +83,38 @@ public class LDAPSyncAdapter extends AbstractThreadedSyncAdapter {
 				builder.withValue(RawContacts.ACCOUNT_TYPE, mAccount.type);
 				builder.withValue(RawContacts.SOURCE_ID, dn);
 				mBatch.add(builder.build());
-				mMapping.buildInsertOps(mBatch, mBatch.size()-1, searchEntry);
+				final int rawContactRef = mBatch.size() - 1;
+				mMapping.buildData(mBatch, searchEntry, new BuilderBuilder() {
+					public Builder newInsert() {
+						Builder result = ContentProviderOperation.newInsert(Utils.syncURI(Data.CONTENT_URI)); 
+						result.withValueBackReference(Data.RAW_CONTACT_ID, rawContactRef);
+						return result;
+					}
+				});
 				mSyncResult.stats.numInserts++;
 			} else {
 				// drop all data from existing row and replace
 				ContentProviderOperation.Builder builder = ContentProviderOperation.newDelete(Utils.syncURI(Data.CONTENT_URI));
 				builder.withSelection(Data.RAW_CONTACT_ID + " = ?", new String[]{""+rawContactId});
 				mBatch.add(builder.build());
-				mMapping.buildReplaceOps(mBatch, rawContactId, searchEntry);
+				mMapping.buildData(mBatch, searchEntry, new BuilderBuilder() {
+					public Builder newInsert() {
+						Builder result = ContentProviderOperation.newInsert(Utils.syncURI(Data.CONTENT_URI)); 
+						result.withValue(Data.RAW_CONTACT_ID, rawContactId);
+						return result;
+					}
+				});
 				mSyncResult.stats.numUpdates++;
+			}
+			
+			if (mBatch.size() >= 50) {
+				applyChanges();
 			}
 		}
 
 		public void applyChanges() {
 			try {
+				Log.v(TAG, "Applying " + mBatch.size() + " operations to contacts DB...");
 				mProvider.applyBatch(mBatch);
 				mBatch.clear();
 			} catch (RemoteException e) {
@@ -152,12 +177,15 @@ public class LDAPSyncAdapter extends AbstractThreadedSyncAdapter {
   		try {
   			SyncSearchListener listener = new SyncSearchListener(provider, mapping, account, syncResult);
 			src.search(listener);
-			Log.v(TAG, "Search complete, applying changes...");
+			Log.v(TAG, "Search complete, applying remaining changes...");
 			listener.applyChanges();
 			Log.v(TAG, "...sync complete.");
 		} catch (LDAPException e)  {
 			Log.e(TAG, "LDAP search failed", e);
 			syncResult.stats.numIoExceptions++;
+		} catch (Exception e) {
+			Log.e(TAG, "Unrecognized error occurred, aborting sync", e);
+			syncResult.databaseError = true;
 		} finally {
 			src.close();
 		}
