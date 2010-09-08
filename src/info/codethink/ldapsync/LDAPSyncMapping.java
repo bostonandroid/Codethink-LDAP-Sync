@@ -25,6 +25,7 @@ import android.database.Cursor;
 import android.os.RemoteException;
 import android.provider.ContactsContract.CommonDataKinds;
 import android.provider.ContactsContract.Data;
+import android.provider.ContactsContract.RawContacts;
 import android.sax.Element;
 import android.sax.RootElement;
 import android.sax.StartElementListener;
@@ -288,8 +289,18 @@ class LDAPSyncMapping {
 	public Entry buildLDIFEntry(ContentProviderClient provider, long rawContactId)
 	{
 		try {
-			String dn = ""; // TODO: get DN
+			Cursor idCursor = provider.query(Utils.syncURI(RawContacts.CONTENT_URI),
+					new String[] { RawContacts.SOURCE_ID },
+					RawContacts._ID + " = " + rawContactId,
+					null, null);
+			if (!idCursor.moveToFirst()) {
+				// contact not found
+				return null;
+			}
+			String dn = idCursor.getString(0);
 			Entry result = new Entry(dn);
+			
+			// translate mapped attributes back to LDAP
 			for (RowBuilder row: mRows) {
 				row.buildLDIFEntry(provider, rawContactId, result);
 			}
